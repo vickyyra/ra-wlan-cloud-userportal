@@ -76,6 +76,12 @@ def test_get_groups():
     assert status == 200, f"Expected 200, got {status}. Body: {body}"
     assert isinstance(body, list), f"Expected JSON array, got {type(body)}. Body: {body}"
     assert any(g.get("id") == CREATED_GROUP_ID for g in body), f"Expected newly created group in list. Body: {body}"
+    for g in body:
+        assert "device_count" in g, f"Expected device_count in group: {g}"
+        assert isinstance(g["device_count"], int) and not isinstance(g["device_count"], bool), f"device_count must be int: {g}"
+        assert g["device_count"] >= 0, f"device_count must be >= 0: {g}"
+    created_group = next(g for g in body if g.get("id") == CREATED_GROUP_ID)
+    assert created_group["device_count"] == 0, f"Expected device_count == 0 for new group: {created_group}"
     print("✅ GET /groups passed")
 
 def test_get_group_by_id():

@@ -459,9 +459,15 @@ class FakeHandler(http.server.BaseHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(json.dumps({"error":"not_found","message":"group not found"}).encode())
             else:
-                cursor.execute("SELECT id, name, description FROM mock_groups WHERE subscriber_id = 'sub1'")
+                cursor.execute("""
+                    SELECT g.id, g.name, g.description, COUNT(d.client_mac) AS device_count
+                    FROM mock_groups g
+                    LEFT JOIN mock_group_devices d ON d.group_id = g.id
+                    WHERE g.subscriber_id = 'sub1'
+                    GROUP BY g.id, g.name, g.description
+                """)
                 rows = cursor.fetchall()
-                groups = [{"id": str(r[0]), "name": r[1], "description": r[2]} for r in rows]
+                groups = [{"id": str(r[0]), "name": r[1], "description": r[2], "device_count": int(r[3])} for r in rows]
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(json.dumps(groups).encode())
