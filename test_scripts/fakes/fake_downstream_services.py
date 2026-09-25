@@ -442,6 +442,15 @@ class FakeHandler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"error":"not_found","message":"group not found"}).encode())
                 return
+            if current_scenario == "groups-device-counts":
+                self.send_response(200)
+                self.end_headers()
+                groups = [
+                    {"id": "11111111-1111-4111-8111-111111111111", "name": "group-1", "device_count": 3},
+                    {"id": "22222222-2222-4222-8222-222222222222", "name": "empty", "device_count": 0}
+                ]
+                self.wfile.write(json.dumps(groups).encode())
+                return
             
             # Use Postgres for Groups CRUD
             cursor = db_conn.cursor()

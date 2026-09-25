@@ -82,7 +82,16 @@ def test_get_groups():
         assert g["device_count"] >= 0, f"device_count must be >= 0: {g}"
     created_group = next(g for g in body if g.get("id") == CREATED_GROUP_ID)
     assert created_group["device_count"] == 0, f"Expected device_count == 0 for new group: {created_group}"
-    print("✅ GET /groups passed")
+
+    # Verify downstream device_count pass-through with known positive and zero counts
+    status, scenario_body = request("GET", "/api/v1/groups", scenario="groups-device-counts")
+    assert status == 200, f"Expected 200, got {status}. Body: {scenario_body}"
+    assert isinstance(scenario_body, list) and len(scenario_body) == 2, f"Expected 2 groups, got: {scenario_body}"
+    assert scenario_body[0]["device_count"] == 3, f"Expected device_count 3, got {scenario_body[0].get('device_count')}"
+    assert scenario_body[0]["name"] == "group-1"
+    assert scenario_body[1]["device_count"] == 0, f"Expected device_count 0, got {scenario_body[1].get('device_count')}"
+    assert scenario_body[1]["name"] == "empty"
+    print("✅ GET /groups passed (verified default 0 and downstream pass-through 3 and 0)")
 
 def test_get_group_by_id():
     print("Testing GET /groups/{id} stateful read...")
