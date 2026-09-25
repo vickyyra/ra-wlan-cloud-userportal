@@ -17,8 +17,14 @@ TEST_INPUT=$(cat <<'EOF'
 [DEBUG] Authorization: Bearer dummy-bearer-token-12345
 [DEBUG] Authorization: Basic dXNlcjpwYXNz
 [DEBUG] Authorization: Basic unencoded_username:unencoded_password
+[DEBUG] Authorization: Bearer abc123 request completed status=200
+[DEBUG] "Authorization": "Bearer jwt-token-secret-999"
+[DEBUG] 'authorization': 'Basic single-quoted-secret'
+[DEBUG] Proxy-Authorization: Basic proxy-secret-pass
+[DEBUG] Basic configuration loaded successfully
+[DEBUG] Bearer token service started
 [DEBUG] Header: X-API-KEY: secret-microservice-key
-[DEBUG] Incoming payload: {"token": "jwt-token-secret-999", "password": "super-secret-password", "client_secret": "app-secret-key"}
+[DEBUG] Incoming payload: {"token": "json-token-secret-999", "password": "super-secret-password", "client_secret": "app-secret-key"}
 [DEBUG] Python dict: {'token': 'single-quoted-token', 'password': 'single-quoted-password'}
 [DEBUG] Simple colon: password: secret-pw
 [DEBUG] Environment: STORAGE_TYPE_POSTGRESQL_PASSWORD=postgres-pw-secret
@@ -41,8 +47,12 @@ for secret in \
   "dummy-bearer-token-12345" \
   "dXNlcjpwYXNz" \
   "unencoded_username:unencoded_password" \
-  "secret-microservice-key" \
+  "abc123" \
   "jwt-token-secret-999" \
+  "single-quoted-secret" \
+  "proxy-secret-pass" \
+  "secret-microservice-key" \
+  "json-token-secret-999" \
   "super-secret-password" \
   "app-secret-key" \
   "single-quoted-token" \
@@ -68,8 +78,8 @@ fi
 
 # Check 2: Ensure [REDACTED] replacement exists
 REDACTED_COUNT=$(echo "$SANITIZED" | grep -o "\[REDACTED\]" | wc -l)
-if [ "$REDACTED_COUNT" -lt 13 ]; then
-  echo "FAIL: Expected at least 13 [REDACTED] replacements, found $REDACTED_COUNT"
+if [ "$REDACTED_COUNT" -lt 16 ]; then
+  echo "FAIL: Expected at least 16 [REDACTED] replacements, found $REDACTED_COUNT"
   echo "Sanitized output:"
   echo "$SANITIZED"
   exit 1
@@ -86,7 +96,24 @@ if ! echo "$SANITIZED" | grep -q 'Device MAC: 00:11:22:33:44:55, TransactionId: 
   exit 1
 fi
 
-# Check 4: Ensure boundary check values are not over-redacted
+# Check 4: Ensure trailing diagnostic information after Authorization header is preserved
+if ! echo "$SANITIZED" | grep -q 'Authorization: Bearer \[REDACTED\] request completed status=200'; then
+  echo "FAIL: Trailing diagnostic context after Authorization header was altered or lost"
+  exit 1
+fi
+
+# Check 5: Ensure non-credential lines containing Basic or Bearer are NOT altered
+if ! echo "$SANITIZED" | grep -q 'Basic configuration loaded successfully'; then
+  echo "FAIL: Non-sensitive line containing Basic was altered: Basic configuration loaded successfully"
+  exit 1
+fi
+
+if ! echo "$SANITIZED" | grep -q 'Bearer token service started'; then
+  echo "FAIL: Non-sensitive line containing Bearer was altered: Bearer token service started"
+  exit 1
+fi
+
+# Check 6: Ensure boundary check values are not over-redacted
 for safe_pattern in "monkey=banana" "turnkey=enabled" "hockey=ice" "&user=sub1"; do
   if ! echo "$SANITIZED" | grep -q "$safe_pattern"; then
     echo "FAIL: Non-sensitive boundary pattern was altered or over-redacted: $safe_pattern"
@@ -96,7 +123,7 @@ done
 
 echo "Log pattern verification: PASS (${REDACTED_COUNT} patterns successfully redacted)"
 
-# Check 5: Pipeline Simulation Test (Testing stream -> tail -> sanitize -> file)
+# Check 7: Pipeline Simulation Test (Testing stream -> tail -> sanitize -> file)
 echo "Running CI pipeline simulation test..."
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TEMP_DIR}"' EXIT
@@ -106,11 +133,11 @@ OUT_LOG="${TEMP_DIR}/userportal-debug.log"
 
 for i in $(seq 1 600); do
   if [ "$i" -eq 50 ]; then
-    echo "Line $i: Early dropped secret: Authorization: Bearer early-secret-token" >> "${SYNTH_LOG}"
+    echo "Line $i: Early dropped secret: Authorization: Bearer early-secret" >> "${SYNTH_LOG}"
   elif [ "$i" -eq 250 ]; then
-    echo "Line $i: Mid-stream header: X-API-KEY: mid-stream-secret-key" >> "${SYNTH_LOG}"
+    echo "Line $i: Mid-stream header: X-API-KEY: retained-secret-header" >> "${SYNTH_LOG}"
   elif [ "$i" -eq 550 ]; then
-    echo "Line $i: Late secret: {\"password\": \"late-secret-password\"}" >> "${SYNTH_LOG}"
+    echo "Line $i: Late secret: {\"password\": \"retained-secret-payload\"}" >> "${SYNTH_LOG}"
   else
     echo "Line $i: Normal operational log event $i at 2026-09-25T16:00:00Z" >> "${SYNTH_LOG}"
   fi
@@ -131,13 +158,13 @@ if [ "${OUT_LINES}" -ne 500 ]; then
 fi
 
 # Assert content before the tail window (line 50) was properly dropped
-if grep -q "early-secret-token" "${OUT_LOG}"; then
-  echo "FAIL: Log before tail boundary was retained in output"
+if grep -q "early-secret" "${OUT_LOG}"; then
+  echo "FAIL: content before tail boundary was retained"
   exit 1
 fi
 
 # Assert retained secrets are redacted in output file
-for sec in "mid-stream-secret-key" "late-secret-password"; do
+for sec in "retained-secret-header" "retained-secret-payload"; do
   if grep -q "$sec" "${OUT_LOG}"; then
     echo "FAIL: Retained secret $sec was not redacted in simulated CI output file"
     exit 1
