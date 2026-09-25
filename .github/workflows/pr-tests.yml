@@ -213,17 +213,29 @@ jobs:
         run: |
           mkdir -p ci-logs
           echo "Collecting bounded, sanitized UserPortal logs..."
-          docker logs userportal 2>&1 | tail -500 | ./test_scripts/ci/sanitize_logs.sh > ci-logs/userportal-debug.log || true
+          if ! (set -o pipefail; docker logs userportal 2>&1 | tail -500 | ./test_scripts/ci/sanitize_logs.sh > ci-logs/userportal-debug.log); then
+            echo "::warning::Failed to collect or sanitize UserPortal container logs"
+          fi
+          if [ ! -s ci-logs/userportal-debug.log ]; then
+            echo "::warning::ci-logs/userportal-debug.log is empty or missing"
+          fi
 
           echo "Collecting bounded, sanitized fake server logs..."
           if [ -f fake_server.log ]; then
-            tail -200 fake_server.log 2>&1 | ./test_scripts/ci/sanitize_logs.sh > ci-logs/fake-server-debug.log || true
+            if ! (set -o pipefail; tail -200 fake_server.log 2>&1 | ./test_scripts/ci/sanitize_logs.sh > ci-logs/fake-server-debug.log); then
+              echo "::warning::Failed to collect or sanitize fake server logs"
+            fi
+            if [ ! -s ci-logs/fake-server-debug.log ]; then
+              echo "::warning::ci-logs/fake-server-debug.log is empty or missing"
+            fi
+          else
+            echo "::warning::fake_server.log was not found on runner"
           fi
 
           echo "=== UserPortal Logs (last 50 lines, sanitized) ==="
-          tail -50 ci-logs/userportal-debug.log || true
+          tail -50 ci-logs/userportal-debug.log 2>/dev/null || true
           echo "=== Fake Server Logs (last 50 lines, sanitized) ==="
-          tail -50 ci-logs/fake-server-debug.log || true
+          tail -50 ci-logs/fake-server-debug.log 2>/dev/null || true
           echo "Full diagnostic logs are uploaded as artifact: userportal-ci-failure-logs"
 
       - name: Upload Diagnostic Logs on Failure

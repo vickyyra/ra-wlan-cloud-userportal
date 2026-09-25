@@ -16,6 +16,7 @@ echo "Running log sanitization pattern verification tests..."
 TEST_INPUT=$(cat <<'EOF'
 [DEBUG] Authorization: Bearer dummy-bearer-token-12345
 [DEBUG] Authorization: Basic dXNlcjpwYXNz
+[DEBUG] Authorization: Basic unencoded_username:unencoded_password
 [DEBUG] Header: X-API-KEY: secret-microservice-key
 [DEBUG] Incoming payload: {"token": "jwt-token-secret-999", "password": "super-secret-password", "client_secret": "app-secret-key"}
 [DEBUG] Python dict: {'token': 'single-quoted-token', 'password': 'single-quoted-password'}
@@ -39,6 +40,7 @@ LEAKED=0
 for secret in \
   "dummy-bearer-token-12345" \
   "dXNlcjpwYXNz" \
+  "unencoded_username:unencoded_password" \
   "secret-microservice-key" \
   "jwt-token-secret-999" \
   "super-secret-password" \
@@ -66,8 +68,8 @@ fi
 
 # Check 2: Ensure [REDACTED] replacement exists
 REDACTED_COUNT=$(echo "$SANITIZED" | grep -o "\[REDACTED\]" | wc -l)
-if [ "$REDACTED_COUNT" -lt 12 ]; then
-  echo "FAIL: Expected at least 12 [REDACTED] replacements, found $REDACTED_COUNT"
+if [ "$REDACTED_COUNT" -lt 13 ]; then
+  echo "FAIL: Expected at least 13 [REDACTED] replacements, found $REDACTED_COUNT"
   echo "Sanitized output:"
   echo "$SANITIZED"
   exit 1
@@ -128,10 +130,16 @@ if [ "${OUT_LINES}" -ne 500 ]; then
   exit 1
 fi
 
-# Assert no secrets in output file
+# Assert content before the tail window (line 50) was properly dropped
+if grep -q "early-secret-token" "${OUT_LOG}"; then
+  echo "FAIL: Log before tail boundary was retained in output"
+  exit 1
+fi
+
+# Assert retained secrets are redacted in output file
 for sec in "mid-stream-secret-key" "late-secret-password"; do
   if grep -q "$sec" "${OUT_LOG}"; then
-    echo "FAIL: Secret $sec found in simulated CI output file"
+    echo "FAIL: Retained secret $sec was not redacted in simulated CI output file"
     exit 1
   fi
 done
@@ -142,4 +150,4 @@ if ! grep -q "Normal operational log event 500" "${OUT_LOG}"; then
   exit 1
 fi
 
-echo "CI pipeline simulation: PASS (500 lines bounded, secrets redacted, file verified)"
+echo "CI pipeline simulation: PASS (500 lines bounded, pre-boundary lines dropped, retained secrets redacted)"
