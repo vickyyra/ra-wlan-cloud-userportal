@@ -12,7 +12,8 @@ else
 fi
 
 sed -E \
-  -e 's/(Bearer[[:space:]]+)[A-Za-z0-9._-]+/\1[REDACTED]/gI' \
-  -e 's/("?(password|secret|token|key)"?[[:space:]]*:[[:space:]]*")[^"]*"/\1[REDACTED]"/gI' \
-  -e 's/((password|secret|token|key)[[:space:]]*=[[:space:]]*)[^[:space:]]+/\1[REDACTED]/gI' \
+  -e 's/((Bearer|Basic)[[:space:]]+)[A-Za-z0-9._~+/-]+=*/\1[REDACTED]/gI' \
+  -e 's/([?&](token|password|secret|key|apiKey)=)[^&[:space:]"'\''`]+/\1[REDACTED]/gI' \
+  -e 's/((^|[^a-zA-Z0-9])["'\''"]([a-zA-Z0-9_.-]*[._-])?(password|secret|token|key|apiKey)["'\''"][[:space:]]*:[[:space:]]*["'\''"])[^"'\''"]*(["'\''"])/\1[REDACTED]\5/gI' \
+  -e 's/((^|[^a-zA-Z0-9])([a-zA-Z0-9_.-]*[._-])?(password|secret|token|key|apiKey)[[:space:]]*[:=][[:space:]]*)[^"'\''[:space:],;&]+/\1[REDACTED]/gI' \
   "$INPUT"
