@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0 OR LicenseRef-Commercial
+# Copyright (c) 2025 Infernet Systems Pvt Ltd
+set -euo pipefail
+
+# Sanitizes sensitive patterns from log streams or files.
+# Reads from file argument if provided, otherwise standard input.
+if [ $# -ge 1 ] && [ "$1" != "-" ]; then
+  INPUT="$1"
+else
+  INPUT="/dev/stdin"
+fi
+
+sed -E \
+  -e 's/(Bearer[[:space:]]+)[A-Za-z0-9._-]+/\1[REDACTED]/gI' \
+  -e 's/("?(password|secret|token|key)"?[[:space:]]*:[[:space:]]*")[^"]*"/\1[REDACTED]"/gI' \
+  -e 's/((password|secret|token|key)[[:space:]]*=[[:space:]]*)[^[:space:]]+/\1[REDACTED]/gI' \
+  "$INPUT"
